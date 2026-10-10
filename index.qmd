@@ -1,0 +1,500 @@
+---
+title: "Data Visualization Assignment"
+author: "Layla Hussain"
+date: today
+format:
+  html:
+    toc: true
+    code-fold: true
+    code-summary: "Show code"
+    df-print: paged
+execute:
+  warning: false
+  message: false
+---
+
+```{r setup}
+#| output: false 
+
+library(tidytuesdayR)
+library(lubridate)
+library(janitor)
+
+```
+
+```{r importing data}
+#| output: false 
+
+# I am using data from tidytuesday called "UFO Sightings Redux"
+# Below, I am importing in the data
+
+ufo_sightings <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2023/2023-06-20/ufo_sightings.csv')
+
+places <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2023/2023-06-20/places.csv')
+
+```
+
+```{r data cleaning}
+#| output: false 
+
+# Here I am following instructions from the tidytuesday post on how to clean this data. Below is lifted directly from the post. I had to comment out some of it because it was causing issues for me and I really didn't need new csv files. 
+
+# All packages used in this script:
+library(tidyverse)
+library(here)
+library(withr)
+
+url <- "https://github.com/jonthegeek/apis/raw/main/data/data_ufo_reports_with_day_part.rds"
+ufo_path <- withr::local_tempfile(fileext = ".rds")
+download.file(url, ufo_path)
+
+ufo_data_original <- readRDS(ufo_path)
+
+# We need to make the csv small enough that github won't choke. We'll pull out
+# some of the joined data back into separate tables.
+
+ufo_sightings <- ufo_data_original |> 
+  dplyr::select(
+    reported_date_time:city,
+    state, 
+    country_code,
+    shape:has_images,
+    day_part
+  ) |> 
+  # This got normalized after the data was saved, re-normalize.
+  dplyr::mutate(
+    shape = tolower(shape)
+  )
+
+places <- ufo_data_original |>
+  dplyr::select(
+    city:country_code, 
+    latitude:elevation_m
+  ) |> 
+  dplyr::distinct()
+
+# # We'll also provide the map of "day parts" in case anybody wants to do
+# # something with that.
+# url2 <- "https://github.com/jonthegeek/apis/raw/main/data/data_day_parts_map.rds"
+# day_parts_path <- withr::local_tempfile(fileext = ".rds")
+# download.file(url2, day_parts_path)
+
+# day_parts_map <- readRDS(day_parts_path)
+# 
+# readr::write_csv(
+#   ufo_sightings,
+#   here::here(
+#     "data",
+#     "2023",
+#     "2023-06-20",
+#     "ufo_sightings.csv"
+#   )
+# )
+# 
+# readr::write_csv(
+#   places,
+#   here::here(
+#     "data",
+#     "2023",
+#     "2023-06-20",
+#     "places.csv"
+#   )
+# )
+
+# readr::write_csv(
+#   day_parts_map,
+#   here::here(
+#     "data",
+#     "2023",
+#     "2023-06-20",
+#     "day_parts_map.csv"
+#   )
+# )
+
+```
+```{r cleaning and counting}
+#| output: false 
+
+#Selecting my variables of interest. I also broke up the reported_date_time_utc so that I could look at year and month frequencies separately 
+
+ufo_sightings_clean <- ufo_sightings |> 
+  select(country_code, state, city, day_part, reported_date_time_utc) |> 
+  mutate(year = year(reported_date_time_utc), month = month(reported_date_time_utc))
+ 
+# Creating a new df with just the number of ufo reports for every country.  
+
+country_counts <- ufo_sightings_clean |> 
+   count(country_code)
+
+# Since there are way too many countries in this data set to make legible plots, I am filtering so that I can find out which countries have over 1000 reported ufo sightings.  
+top_country_counts <- country_counts |> 
+  filter(n >= 1000)
+
+# Making a df for observations from the top three countries
+
+top_country_sightings <- ufo_sightings_clean |> 
+  filter(country_code == "US" | 
+         country_code == "CA" |
+         country_code =="GB")
+
+```
+
+```{r new dfs}
+#| output: false 
+
+# Now, I am making separate dfs, one for just US sightings, one for every other country.
+
+# Some of these dfs were just exploratory, but others are used in later code chunks. 
+
+# Just US sightings. 
+
+us_ufo_sightings <- ufo_sightings_clean |> 
+    filter(country_code == "US") 
+    
+# Sightings for all other countries except US. 
+
+non_us_sightings <- ufo_sightings_clean |> 
+  filter(country_code != "US")
+  
+```
+
+```{r exploring df}
+#| output: false 
+
+# Below, I am investigating the frequency of my variables to see if there is anything interesting going on. 
+
+us_ufo_sightings |> count(month, sort = T)
+
+us_ufo_sightings |> count(year, sort = T)
+
+top_country_sightings |>
+  filter(country_code == "GB") |> 
+  count(year, sort = T)
+
+```
+# UFO Sightings and Their Many Mysteries 
+
+## Story Summary 
+
+On the surface, it can seem as if Americans living in the United States have a uniquely intense fascination with Unidentified Flying Objects (UFOs) and Unidentified Anomalous Phenomena (UAPs). It is unclear what exactly is driving this pattern. Do Americans really receive more visits from alien species? In this assignment, I'll show that Americans are not so different from the rest of us in terms of how and when UFO sightings seems to crop up. 
+
+## Accessible / Dynamic Outlet
+
+The National UFO Reporting Center is a nonprofit corporation that has been diligently  collecting, preserving, and sharing information about UFO and UAP sighting that are reported from all around the world. Compared to every other country, America takes a huge lead in the number of UFO sightings reported each and every year! Even when compared to just the second and third runners up (Canada and Great Britain) the USA still massively outperforms in terms total number of UFO reports per year.   
+
+Does  this mean that Aliens simply love vacationing in the Great USA? Or is there something more at play? The graph below notes some major historical events that may contribute to frenzies and conspiracy theories that inspire the general public to look into other fringe events, like UFOs. For example, the popularization of having an internet connect in households may be a contributor. The advent of email likely also meant that people could now share their UFO stories much more rapidly. We've also noted the year that Donald Trump first announced his presidential campaign and the year that COVID-19 was officially labelled a pandemic. Both of these events are possible explanations as to why Americans may have been thinking more about conspiracy theories, and by association, UFOs. Indeed, we do see spikes in the number of reports made around these key points in time!
+
+```{r lay top countries together plot}
+
+lay_top_countries_plot <- top_country_sightings |> 
+  filter(year >= 1980) |> 
+  count(country_code, year) |> 
+  ggplot(aes(x = year, y = n, colour = country_code)) +
+
+
+  geom_line(alpha = 0.7, linewidth = 0.9)+
+  
+# Fixing up scale colours and names.
+  
+  scale_colour_manual(
+    name = NULL,
+    values = c(
+  "US" = "coral1",
+  "CA" = "cornflowerblue",
+  "GB" = "darkmagenta"), 
+    labels = c(
+    "US" = "USA",
+    "CA" = "Canada",
+    "GB" = "Great Britain")) +
+
+# Specifying the scale breaks.
+  
+  scale_y_continuous(breaks = seq(0, 7000, 2000)) +
+  coord_cartesian(ylim = c(0, 7000)) +
+  scale_x_continuous(breaks = seq(1980, 2023, 43)) +
+
+  labs(
+    title = "USA Takes the Lead!",
+    x = "Year",
+    y = "Number of UFO Sightings") +
+  
+    theme_minimal(base_size = 14)+
+  theme(
+   panel.grid= element_blank(),
+   axis.text.y = element_blank(),
+   axis.line.x = element_line(),
+   
+    plot.title = element_text(face = "bold", size = 18),
+    plot.caption = element_text(hjust = 0, size = 8),
+    
+    axis.title = element_text(size = 12, face = "bold"),
+    axis.title.x = element_text(margin = margin(t = 10)),
+    axis.title.y = element_text(margin = margin(r = 5)),
+    
+    legend.position = c(.18, .75),
+    legend.title = element_text(size = 14),
+    legend.text = element_text(size = 12),
+    legend.key.size = unit(2,"line"),
+    legend.key.height = unit (2, "line"),
+    legend.box.background = element_rect(colour = "white", linewidth = 1))+
+
+# Adding historical even labels. 
+  
+  annotate("label", x = 1996, y = 1500,
+           label = "Email becomes\npopularized, 1996",
+           hjust = 0.8,
+           colour = "grey30", size = 3,
+           fill = "white") +
+
+  annotate("label", x = 2015, y = 6900,
+           label = "Trump's presidency\ncampaign begins, 2015",
+           colour = "grey30", size = 3,
+           fill = "white") +
+
+  annotate("label", x = 2020, y = 5000,
+           label = "COVID-19 reaches\npandemic status, 2020",
+           hjust = 0.55,
+           colour = "grey30", size = 3,
+           fill = "white")
+
+print(lay_top_countries_plot)
+
+
+```
+
+But, Trump's antics and a global pandemic surely impacted other countries too, right? So why aren't we seeing comparable spikes in Canada and Britain? Well, one big reason is population size. America is home to many more people than Canada and Great Britain. When we take the USA out of the equation, will we be able to see the patterns that we expect?
+
+Yes! For the most part...The graph below shows the exact same data as the last graph, but minus American-made UFO reports. Now we can clearly see some patterns. A country close to America, like Canada would likely be more exposed to Trump's campaign than Great Britain. Whereas an event like COVID-19 should be was equally influential around the world. This is exactly what we see in the graph below! Reported UFO sightings seem to peak and dip along with conspiracy-inducing events, so long as it's relevant to the country that the reports are coming from.  
+
+```{r lay non us plot}
+
+# The only notable differences in this code chunk compared to the last is that I am excluding US data and zooming in so that the scale starts at 1990 rather than 1980.
+
+lay_non_us_plot <- top_country_sightings |> 
+  filter(year >= 1990,
+         country_code != "US") |> 
+  count(country_code, year) |> 
+  ggplot(aes(x = year, y = n, colour = country_code)) +
+  geom_line(alpha = 0.7, linewidth = 0.9)+
+  
+  scale_colour_manual(
+    name = NULL,
+    values = c(
+  "CA" = "cornflowerblue",
+  "GB" = "darkmagenta"), 
+    labels = c(
+    "CA" = "Canada",
+    "GB" = "Great Britain")) +
+
+   scale_y_continuous(breaks = seq(0, 250, 100)) +
+  coord_cartesian(ylim = c(0, 250)) +
+  scale_x_continuous(breaks = seq(1990, 2023, 33)) +
+  
+  labs(
+    title = "Canada & Great Britain, Still in the Running",
+    x = "Year",
+    y = "UFO Reports") +
+  
+    theme_minimal(base_size = 14)+
+  theme(
+    panel.grid= element_blank(),
+   axis.text.y = element_blank(),
+   axis.line.x = element_line(),
+
+    plot.title = element_text(face = "bold", size = 16),
+    plot.caption = element_text(hjust = 0, size = 8),
+    
+    axis.title = element_text(size = 14, face = "bold"),
+    axis.title.x = element_text(margin = margin(t = 10)),
+    axis.title.y = element_text(margin = margin(r = 5)),
+    
+    legend.position = c(.18, .85),
+    legend.title = element_text(size = 13),
+    legend.text = element_text(size = 10),
+    legend.key.size = unit(1.5,"line"),
+    legend.key.height = unit (1, "line"),
+    legend.box.background = element_rect(colour = "white", linewidth = 0.5))+
+
+  annotate("label", x = 2015, y = 235,
+           label = "Trump's presidency\ncampaign begins, 2015",
+           colour = "grey30", size = 3,
+           fill = "white") +
+
+  annotate("label", x = 2020, y = 100,
+           label = "COVID-19 reaches\npandemic status, 2020",
+           hjust = 0.45,
+           colour = "grey30", size = 3,
+           fill = "white")
+
+print(lay_non_us_plot)
+
+```
+
+## Scientific Article
+
+The National UFO Reporting Center, a nonprofit corporation, collects, preserves, and publicly shares data on reports of UFO and UAP sightings. Reports are collected from 152 countries and range report date, with the oldest reports having been made in 1925 and the most recent, made in 2023. 
+
+The vast majority of UFO sightings are reported to have occurred in the United States of America. This is true across time, the number of American reports made is much greater than the number of Non-American reports made in any given year. This difference is made clear when comparing the number of American reports per year to the number of reports from Canada and Great Britain (second and third most reports respectively). See Figure 1. 
+
+Figure 1. displays the number of UFO sightings reported from 1980 through 2023 (inclusive). The vertical lines represent major historical events in the time range. They are, in order from left to right, the introduction of personal email accounts to the general public, Donald Trump's presidential campaign announcement, and the COVID-19 pandemic.  
+
+Evidently, these historical events appear to map onto the major spikes in UFO sighting report frequency in the US but not in Canada nor Great Britain. This finding seems surprising given that a global pandemic is expected to influence all countries to some degree. This concept is further explored in Figure 2.
+
+```{r sci top countries together plot}
+
+sci_top_countries_plot <- top_country_sightings |> 
+  filter(year >= 1980) |> 
+  count(country_code, year) |> 
+  ggplot(aes(x = year, y = n, linetype = country_code)) +
+
+# Instead of labels for the hisorical events, I have lines. 
+  
+   geom_vline(xintercept = 1996,
+             linetype = "solid",
+             color = "azure4",
+             linewidth = 0.6,
+             alpha = 0.6) +
+
+  geom_vline(xintercept = 2015,
+             linetype = "solid",
+             color = "azure4",
+             linewidth = 0.6,
+             alpha = 0.6) +
+
+   geom_vline(xintercept = 2020,
+             linetype = "solid",
+             color = "azure4",
+             linewidth = 0.6,
+             alpha = 0.6) +
+
+  geom_line(alpha = 0.7, linewidth = 0.9)+
+  
+  scale_linetype_manual(
+    name = NULL,
+    values = c(
+  "US" = "dashed",
+  "CA" = "solid",
+  "GB" = "dotted"), 
+    labels = c(
+    "US" = "USA",
+    "CA" = "Canada",
+    "GB" = "Great Britain")) +
+
+   scale_y_continuous(breaks = seq(0, 7000, 2000)) +
+  coord_cartesian(ylim = c(0, 7000)) +
+  scale_x_continuous(breaks = seq(1980, 2023, 3)) +
+  
+  labs(
+    title = "Total Number of UFO Sightings Reported by Year",
+    x = "Year",
+    y = "Total Number of Reports",
+    caption = "Figure 1. Vertical lines denote major historical events.
+    \nHistorical events of note are described in the main text.
+    \nNote:This graph covers reports made between 1980 and 2023 (inclusive).") +
+  
+    theme_minimal(base_size = 12)+
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.line = element_line(),
+    axis.ticks = element_line(),
+
+    plot.title = element_text(size = 16),
+    plot.caption = element_text(hjust = 0, size = 8),
+    
+    axis.title = element_text(size = 12),
+    axis.title.x = element_text(margin = margin(t = 10)),
+    axis.title.y = element_text(margin = margin(r = 10)),
+    
+    legend.position = c(.18, .85),
+    legend.title = element_text(size = 13),
+    legend.text = element_text(size = 10),
+    legend.key.size = unit(1.5,"line"),
+    legend.key.height = unit (1, "line"),
+    legend.box.background = element_rect(colour = "azure4", linewidth = 0.5))
+
+print(sci_top_countries_plot)
+
+
+```
+
+Figure 2. Describes the same data as Figure 1, after excluding observations from the United states. When removing the very populous United states from the data set, it becomes much evident that major historical events do indeed map onto the number of UFO sighting reports made per year. 
+
+```{r sci non us plot}
+
+sci_top_countries_plot <- top_country_sightings |> 
+  filter(year >= 1990, country_code != "US") |> 
+  count(country_code, year) |> 
+  ggplot(aes(x = year, y = n, linetype = country_code)) +
+  
+   geom_vline(xintercept = 1996,
+             linetype = "solid",
+             color = "azure4",
+             linewidth = 0.6,
+             alpha = 0.6) +
+
+  geom_vline(xintercept = 2015,
+             linetype = "solid",
+             color = "azure4",
+             linewidth = 0.6,
+             alpha = 0.6) +
+
+   geom_vline(xintercept = 2020,
+             linetype = "solid",
+             color = "azure4",
+             linewidth = 0.6,
+             alpha = 0.6) +
+
+  geom_line(alpha = 0.7, linewidth = 0.9)+
+  
+  scale_linetype_manual(
+    name = NULL,
+    values = c(
+  "CA" = "solid",
+  "GB" = "dotted"), 
+    labels = c(
+    "CA" = "Canada",
+    "GB" = "Great Britain")) +
+
+   scale_y_continuous(breaks = seq(0, 250, 100)) +
+  coord_cartesian(ylim = c(0, 250)) +
+  scale_x_continuous(breaks = seq(1990, 2023, 3)) +
+  
+  labs(
+    title = "Total Number of UFO Sightings Reported by Year in Canada & Great Britain",
+    x = "Year",
+    y = "Total Number of Reports",
+    caption = "Figure 2. Vertical lines denote major historical events.
+    \nNote: This graph covers reports made between 1990 and 2023 (inclusive), rather than 1980 and 2023 as seen in Figure 1.") +
+  
+    theme_minimal(base_size = 12)+
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.line = element_line(),
+    axis.ticks = element_line(),
+
+    plot.title = element_text(size = 14),
+    plot.caption = element_text(hjust = 0, size = 8),
+    
+    axis.title = element_text(size = 12),
+    axis.title.x = element_text(margin = margin(t = 10)),
+    axis.title.y = element_text(margin = margin(r = 10)),
+    
+    legend.position = c(.18, .85),
+    legend.title = element_text(size = 13),
+    legend.text = element_text(size = 10),
+    legend.key.size = unit(1.5,"line"),
+    legend.key.height = unit (1, "line"),
+    legend.box.background = element_rect(colour = "azure4", linewidth = 0.5))
+
+print(sci_top_countries_plot)
+
+
+```
+
+## Data Source Note
+
+Data was sourced from a posting on tidytuesday. See link: https://github.com/rfordatascience/tidytuesday/blob/main/data/2023/2023-06-20/readme.md
+
+Data set is called UFO Sightings Redux and is sourced from the National UFO Reporting Center. 
